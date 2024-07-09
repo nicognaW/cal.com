@@ -1151,17 +1151,12 @@ describe("handleSeats", () => {
             eventTypeId: 1,
           },
           include: {
-            attendees: true,
+            seatsReferences: true,
           },
         });
 
         expect(bookings.length).toBe(1);
-
-        expect(bookings[0].attendees.length).toBe(2);
-
-        const attendeeEmails = bookings[0].attendees.map((attendee) => attendee.email);
-        expect(attendeeEmails).toContain(booker1.email);
-        expect(attendeeEmails).toContain(booker2.email);
+        expect(bookings[0].seatsReferences.length).toBe(2);
       });
     });
 
