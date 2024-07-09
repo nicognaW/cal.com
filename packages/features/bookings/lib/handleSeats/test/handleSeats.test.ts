@@ -1056,6 +1056,113 @@ describe("handleSeats", () => {
 
         expect(bookingSeatCount).toBe(2);
       });
+
+      test("Only one booking should be created when creating a new booking concurrently.", async () => {
+        const handleNewBooking = (await import("@calcom/features/bookings/lib/handleNewBooking")).default;
+
+        const booker1 = getBooker({
+          email: "seat3@example.com",
+          name: "Seat 3",
+        });
+
+        const booker2 = getBooker({
+          email: "seat4@example.com",
+          name: "Seat 4",
+        });
+
+        const organizer = getOrganizer({
+          name: "Organizer",
+          email: "organizer@example.com",
+          id: 101,
+          schedules: [TestData.schedules.IstWorkHours],
+        });
+
+        await createBookingScenario(
+          getScenarioData({
+            eventTypes: [
+              {
+                id: 1,
+                slug: "seated-event",
+                slotInterval: 30,
+                length: 30,
+                users: [
+                  {
+                    id: 101,
+                  },
+                ],
+                seatsPerTimeSlot: 2,
+                seatsShowAttendees: false,
+              },
+            ],
+            organizer,
+          })
+        );
+
+        mockSuccessfulVideoMeetingCreation({
+          metadataLookupKey: "dailyvideo",
+          videoMeetingData: {
+            id: "MOCK_ID",
+            password: "MOCK_PASS",
+            url: `http://mock-dailyvideo.example.com/meeting-1`,
+          },
+        });
+
+        const reqBookingUser1 = "seatedAttendee";
+        const reqBookingUser2 = "anotherSeatedAttendee";
+
+        const mockBookingData1 = getMockRequestDataForBooking({
+          data: {
+            eventTypeId: 1,
+            responses: {
+              email: booker1.email,
+              name: booker1.name,
+              location: { optionValue: "", value: BookingLocations.CalVideo },
+            },
+            user: reqBookingUser1,
+          },
+        });
+
+        const mockBookingData2 = getMockRequestDataForBooking({
+          data: {
+            eventTypeId: 1,
+            responses: {
+              email: booker2.email,
+              name: booker2.name,
+              location: { optionValue: "", value: BookingLocations.CalVideo },
+            },
+            user: reqBookingUser2,
+          },
+        });
+
+        const { req: req1 } = createMockNextJsRequest({
+          method: "POST",
+          body: mockBookingData1,
+        });
+
+        const { req: req2 } = createMockNextJsRequest({
+          method: "POST",
+          body: mockBookingData2,
+        });
+
+        await Promise.all([handleNewBooking(req1), handleNewBooking(req2)]);
+
+        const bookings = await prismaMock.booking.findMany({
+          where: {
+            eventTypeId: 1,
+          },
+          include: {
+            attendees: true,
+          },
+        });
+
+        expect(bookings.length).toBe(1);
+
+        expect(bookings[0].attendees.length).toBe(2);
+
+        const attendeeEmails = bookings[0].attendees.map((attendee) => attendee.email);
+        expect(attendeeEmails).toContain(booker1.email);
+        expect(attendeeEmails).toContain(booker2.email);
+      });
     });
 
     describe("Rescheduling a booking", () => {
